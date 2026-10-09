@@ -7,6 +7,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 use Reactll\Connect\Console\HeartbeatCommand;
+use Reactll\Connect\Http\Middleware\HealthEndpoint;
 use Reactll\Connect\Http\Middleware\InjectScript;
 
 class ConnectServiceProvider extends ServiceProvider
@@ -22,6 +23,9 @@ class ConnectServiceProvider extends ServiceProvider
         $this->publishes([__DIR__.'/../config/reactll-connect.php' => config_path('reactll-connect.php')], 'reactll-connect');
 
         Blade::directive('reactllConnect', fn () => '<?php echo app(\Reactll\Connect\Connect::class)->script(); ?>');
+
+        // Reactll's hourly health question, answered before routing (no scheduler or route cache needed).
+        $this->app->make(\Illuminate\Contracts\Http\Kernel::class)->pushMiddleware(HealthEndpoint::class);
 
         if (config('reactll-connect.inject', true)) {
             $router->pushMiddlewareToGroup('web', InjectScript::class);

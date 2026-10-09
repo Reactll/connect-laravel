@@ -18,7 +18,8 @@ php artisan reactll:heartbeat   # checks the connection
 ```
 
 That's it: the script is added to every HTML page of the `web` group (not to your admin paths, not for
-signed-in users), and a heartbeat runs hourly through the scheduler.
+signed-in users). Reactll asks the app for its health every hour (`GET /api/reactll/health`, signed —
+nothing else gets an answer), so no scheduler is needed; if one runs, `reactll:heartbeat` also reports hourly.
 
 ## Form leads
 

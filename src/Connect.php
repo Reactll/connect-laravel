@@ -16,7 +16,7 @@ use Throwable;
  */
 class Connect
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     /** @var array{u: string, k: string, s: string}|null|false */
     private array|null|false $credentials = false;
@@ -85,10 +85,10 @@ class Connect
         app()->terminating(fn () => $this->submission($form, $fields, $request, $id));
     }
 
-    /** Versions and settings, hourly (reactll:heartbeat). Returns Reactll's answer. */
-    public function heartbeat(): ?array
+    /** What this app runs: sent by reactll:heartbeat, and answered when Reactll asks (/api/reactll/health). */
+    public function healthPayload(): array
     {
-        return $this->post('heartbeat', [
+        return [
             'platform' => 'laravel',
             'version' => self::VERSION,
             'site_url' => config('app.url'),
@@ -100,7 +100,13 @@ class Connect
                 'cache' => config('cache.default'),
                 'database' => config('database.default'),
             ]),
-        ], 10);
+        ];
+    }
+
+    /** Versions and settings (reactll:heartbeat, if the app runs a scheduler). Returns Reactll's answer. */
+    public function heartbeat(): ?array
+    {
+        return $this->post('heartbeat', $this->healthPayload(), 10);
     }
 
     /** @return array<string, mixed>|null */
