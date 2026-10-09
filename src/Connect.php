@@ -16,7 +16,7 @@ use Throwable;
  */
 class Connect
 {
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.1.1';
 
     /** @var array{u: string, k: string, s: string}|null|false */
     private array|null|false $credentials = false;
@@ -99,6 +99,8 @@ class Connect
                 'queue' => config('queue.default'),
                 'cache' => config('cache.default'),
                 'database' => config('database.default'),
+                // Reactll counts the site's days on this clock (UTC is read as "not set").
+                'timezone' => config('app.timezone'),
             ]),
         ];
     }
