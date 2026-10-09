@@ -40,6 +40,15 @@ already has their response (recommended), use `Connect::submitAfterResponse(...)
 `php artisan vendor:publish --tag=reactll-connect` — paths to skip, counting signed-in users, turning
 the automatic script off (then put `@reactllConnect` in your layout's `<head>`).
 
+## Content-Security-Policy
+
+If the site sends a CSP header, allow Reactll Connect in it, or the browser blocks the script and its beacons:
+
+```
+script-src  … https://connect.reactll.com
+connect-src … https://connect.reactll.com
+```
+
 ## License
 
 MIT © Reactor Technology
