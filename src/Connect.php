@@ -18,7 +18,7 @@ use Throwable;
  */
 class Connect
 {
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     public const MODULES = ['visitors', 'events', 'forms', 'sales'];
 
@@ -338,6 +338,83 @@ class Connect
         }
 
         return $result(true);
+    }
+
+    /** One subscription now (trial started, renewed, cancelled, plan changed). See sendSubscriptions(). */
+    public function subscription(array $subscription): Result
+    {
+        return $this->sendSubscriptions([$subscription]);
+    }
+
+    /**
+     * Subscriptions now (POST /v1/subscriptions, batches of 50): what MRR, churn and trials are counted from.
+     * Idempotent — a repeat with an older or equal updated_at changes nothing, so a scheduled full resend is fine.
+     * Unlike orders there is no retry queue: send them from a job or a scheduled command, which reruns.
+     *
+     * @param  list<array<string, mixed>>  $subscriptions
+     * @param  list<string|int>  $deleted  subscription ids removed in the app
+     */
+    public function sendSubscriptions(array $subscriptions, array $deleted = []): Result
+    {
+        if (! $this->module('sales')) {
+            return Result::switchedOff();
+        }
+        $secret = $this->credentials()['s'] ?? null;
+        if (! $secret) {
+            return Result::notConnected();
+        }
+        $payloads = [];
+        $skipped = 0;
+        foreach ($subscriptions as $s) {
+            $one = is_array($s) ? Subscriptions::normalise($s, $secret) : null;
+            if ($one) {
+                $payloads[$one['id']] = $one;
+            } else {
+                $skipped++;
+            }
+        }
+        $payloads = array_values($payloads);
+        $deleted = $this->ids($deleted);
+        $t = ['stored' => 0, 'updated' => 0, 'deleted' => 0, 'skipped' => $skipped];
+        $allowed = null;
+        $result = function (bool $ok, ?string $reason = null) use (&$t, &$allowed) {
+            return new Result($ok, $t['stored'], $t['updated'], $t['deleted'], $t['skipped'], $allowed, $reason);
+        };
+
+        while ($payloads || $deleted) {
+            $batch = array_splice($payloads, 0, self::BATCH);
+            $gone = array_splice($deleted, 0, self::BATCH);
+            [$status, $json] = $this->send('subscriptions', ['site_url' => (string) config('app.url'), 'subscriptions' => $batch, 'deleted' => $gone], 10) ?? [0, []];
+            if ($status === 409 && ($json['error'] ?? null) === 'host') {
+                return $result(false, 'host');
+            }
+            if ($status === 409) {
+                continue; // the same signed request already arrived
+            }
+            if ($status >= 200 && $status < 300) {
+                foreach (['stored', 'updated', 'deleted', 'skipped'] as $count) {
+                    $t[$count] += (int) ($json[$count] ?? 0);
+                }
+                if (array_key_exists('sales_allowed', $json)) {
+                    $allowed = (bool) $json['sales_allowed'];
+                }
+                if (! empty($json['reason'])) {
+                    return $result(true, (string) $json['reason']);
+                }
+
+                continue;
+            }
+
+            return $result(false, $status === 0 || $status >= 500 || $status === 429 ? 'unreachable' : 'refused');
+        }
+
+        return $result(true);
+    }
+
+    /** A Stripe Subscription as a contract subscription (pass plan / email in $extra when the object only has ids). */
+    public function fromStripeSubscription(array|object $subscription, array $extra = []): ?array
+    {
+        return Subscriptions::fromStripe($subscription, $extra, $this->credentials()['s'] ?? null);
     }
 
     /** What this app runs: sent by reactll:heartbeat, and answered when Reactll asks (/api/reactll/health). */

@@ -106,6 +106,10 @@ final class Orders
             'source' => array_filter($source, fn ($v) => $v !== null) ? $source : null,
             'visit' => preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $visit) ? $visit : null,
             'admin_url' => strlen($admin) <= 2000 && preg_match('#^https?://#i', $admin) && filter_var($admin, FILTER_VALIDATE_URL) ? $admin : null,
+            // The subscription this payment belongs to (an invoice): HQ links them and keeps the subscription's state.
+            'subscription' => is_array($order['subscription'] ?? null)
+                ? Subscriptions::normalise($order['subscription'] + ['currency' => $currency, 'customer' => $order['customer'] ?? [], 'email' => $order['email'] ?? null, 'customer_id' => $order['customer_id'] ?? $order['user_id'] ?? null], $secret)
+                : null,
         ];
     }
 
@@ -125,8 +129,8 @@ final class Orders
         return $id !== '' && $secret ? hash_hmac('sha256', 'id:'.$id, $secret) : null;
     }
 
-    /** @return array{label: string|null, city: string|null, country: string|null, key: string|null, returning: bool|null} */
-    private static function customer(array $order, ?string $secret): array
+    /** @return array{label: string|null, city: string|null, country: string|null, key: string|null, returning: bool|null} @internal shared with Subscriptions */
+    public static function customer(array $order, ?string $secret): array
     {
         $c = is_array($order['customer'] ?? null) ? $order['customer'] : [];
         $email = $c['email'] ?? $order['email'] ?? $order['customer_email'] ?? null;
@@ -146,8 +150,8 @@ final class Orders
         ];
     }
 
-    /** First name + initial of the last name ("Maria L."), from first_name / last_name, name or label. */
-    private static function label(array $c): ?string
+    /** First name + initial of the last name ("Maria L."), from first_name / last_name, name or label. @internal shared with Subscriptions */
+    public static function label(array $c): ?string
     {
         $first = self::text($c['first_name'] ?? null, 60);
         $last = self::text($c['last_name'] ?? null, 60);
@@ -277,15 +281,16 @@ final class Orders
         return in_array($currency, self::ZERO_DECIMALS, true) ? 0 : (in_array($currency, self::THREE_DECIMALS, true) ? 3 : 2);
     }
 
-    private static function fromSmallest(int $amount, string $currency): string
+    /** @internal shared with Subscriptions (Stripe's smallest units) */
+    public static function fromSmallest(int $amount, string $currency): string
     {
         $divisor = in_array($currency, self::STRIPE_ZERO, true) ? 1 : (in_array($currency, self::STRIPE_THREE, true) ? 1000 : 100);
 
         return number_format($amount / $divisor, self::decimals($currency), '.', '');
     }
 
-    /** A decimal string in the currency's minor units ("86.40"), or null when it is not a number. */
-    private static function money(mixed $value, string $currency): ?string
+    /** A decimal string in the currency's minor units ("86.40"), or null when it is not a number. @internal shared with Subscriptions */
+    public static function money(mixed $value, string $currency): ?string
     {
         if (is_string($value)) {
             $value = trim(str_replace([',', ' '], ['', ''], $value));
@@ -298,8 +303,8 @@ final class Orders
         return $out === '-0' || preg_match('/^-0\.0+$/', $out) ? ltrim($out, '-') : $out;
     }
 
-    /** ISO 8601 with offset, from Carbon / DateTime, a unix timestamp or any date string (read on the app's clock). */
-    private static function date(mixed $value): ?string
+    /** ISO 8601 with offset, from Carbon / DateTime, a unix timestamp or any date string (read on the app's clock). @internal shared with Subscriptions */
+    public static function date(mixed $value): ?string
     {
         try {
             if ($value instanceof DateTimeInterface) {
@@ -326,7 +331,8 @@ final class Orders
         return new DateTimeZone(date_default_timezone_get());
     }
 
-    private static function text(mixed $value, int $max): ?string
+    /** @internal shared with Subscriptions */
+    public static function text(mixed $value, int $max): ?string
     {
         if (! is_scalar($value)) {
             return null;

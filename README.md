@@ -130,6 +130,39 @@ Every call returns a `Reactll\Connect\Result` and never throws:
 
 `site_url` is `config('app.url')`: it has to match the site's address in Reactll.
 
+### Subscriptions (MRR, churn, trials)
+
+A subscription business also sends the subscriptions themselves (`POST /v1/subscriptions`): Reactll counts MRR,
+new and cancelled subscribers and trials from them, while the paid invoices above stay the revenue. Send one when it
+starts, renews, changes plan, fails to renew or is cancelled — or resend them all from a scheduled command: a repeat
+with an older or equal `updated_at` changes nothing.
+
+```php
+Connect::subscription([
+    'id' => $sub->id,
+    'plan' => 'Pro · Monthly',
+    'status' => 'active',              // trialing, active, past_due, paused, canceled (cancelled / expired / unpaid accepted)
+    'currency' => 'USD',
+    'amount' => 9.99,                  // per interval, after discounts, excl. tax
+    'interval' => 'month',             // day, week, month, year (monthly / yearly accepted)
+    'started_at' => $sub->created_at,
+    'current_period_end' => $sub->renews_at,
+    'canceled_at' => $sub->canceled_at,
+    'ends_at' => $sub->ends_at,        // cancelled at period end: access and MRR run to here
+    'updated_at' => $sub->updated_at,
+    'email' => $user->email,           // or customer_id — hashed, never sent
+    'customer' => ['name' => $user->name],
+]);
+
+Connect::sendSubscriptions($all, $deletedIds);              // now, batches of 50, returns a Result
+Connect::fromStripeSubscription($stripeSub, ['plan' => 'Pro', 'email' => $email]);   // customer.subscription.* webhooks
+
+// Or on the invoice order itself: `subscription` links the payment to it (currency and customer come from the order)
+Connect::order([...$invoiceOrder, 'subscription' => ['id' => $sub->id, 'status' => 'active', 'amount' => 9.99, 'interval' => 'month', 'updated_at' => now()]]);
+```
+
+Unlike orders, subscriptions have no retry queue: send them from a job or a scheduled command, which runs again.
+
 ## Environment
 
 | Variable | Default | |
