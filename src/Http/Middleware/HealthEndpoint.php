@@ -31,6 +31,11 @@ class HealthEndpoint
             return response()->json(['error' => 'unauthorized'], 401);
         }
 
+        // Orders Reactll could not take earlier go again once this answer is out (no scheduler needed).
+        if ($this->connect->hasRetry()) {
+            app()->terminating(fn () => $this->connect->retry());
+        }
+
         return response()->json($this->connect->healthPayload(), 200, ['Cache-Control' => 'no-store']);
     }
 }

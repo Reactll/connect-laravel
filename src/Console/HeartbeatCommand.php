@@ -27,6 +27,10 @@ class HeartbeatCommand extends Command
         }
         $this->info('Connected to Reactll as '.($answer['site']['name'] ?? 'this site').'.');
 
+        if ($retry = $connect->retry()) {
+            $this->line($retry->ok ? 'Orders waiting for a retry were sent.' : 'Orders waiting for a retry could not be sent yet ('.$retry->reason.').');
+        }
+
         return self::SUCCESS;
     }
 }

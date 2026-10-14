@@ -33,6 +33,7 @@ class InjectScript
     private function wanted(Request $request, Response $response): bool
     {
         return $this->connect->connected()
+            && $this->connect->module('visitors')
             && $request->isMethod('GET')
             && ! $request->expectsJson()
             && ! $request->is(...(array) config('reactll-connect.except', []))
